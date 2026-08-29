@@ -170,7 +170,7 @@ func (l *Lexer) peekChar() byte {
 }
 
 func isLetter(ch byte) bool {
-	return 'a' <= ch && ch <= 'z' || 'A' <= ch && ch <= 'Z' || ch == '_' || ch > 127
+	return 'a' <= ch && ch <= 'z' || 'A' <= ch && ch <= 'Z' || ch == '_' || ch == '-' || ch > 127
 }
 
 func isDigit(ch byte) bool {

@@ -128,7 +128,7 @@ type JoinStatement struct {
 	Alias     string        // alias for right table
 }
 
-func (j *JoinStatement) statementNode()       {}
+func (j *JoinStatement) expressionNode()      {}
 func (j *JoinStatement) TokenLiteral() string { return j.Token }
 func (j *JoinStatement) String() string {
 	return fmt.Sprintf("%s /\\ %s -> %s", j.Left, j.Right, j.Condition)

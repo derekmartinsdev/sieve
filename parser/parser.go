@@ -54,8 +54,9 @@ func (p *Parser) ParseProgram() *ast.Program {
 		stmt := p.parseStatement()
 		if stmt != nil {
 			prog.Statements = append(prog.Statements, stmt)
+		} else {
+			p.nextToken()
 		}
-		p.nextToken()
 	}
 	return prog
 }
@@ -107,34 +108,28 @@ func (p *Parser) parseSourceStatement() *ast.SourceStatement {
 }
 
 func (p *Parser) parseS3Source() *ast.S3Source {
-	s3 := &ast.S3Source{}
+    s3 := &ast.S3Source{}
 
-	for !p.peekTokenIs(token.EXTRACT) && !p.peekTokenIs(token.EOF) && !p.peekTokenIs(token.IDENT) {
-		p.nextToken()
-		switch p.cur.Type {
-		case token.BUCKET:
-			if p.expectPeek(token.STRING) || p.peekTokenIs(token.IDENT) {
-				p.nextToken()
-				s3.Bucket = p.cur.Literal
-			}
-		case token.REGION:
-			if p.expectPeek(token.STRING) || p.peekTokenIs(token.IDENT) {
-				p.nextToken()
-				s3.Region = p.cur.Literal
-			}
-		case token.PREFIX:
-			if p.expectPeek(token.STRING) || p.peekTokenIs(token.IDENT) {
-				p.nextToken()
-				s3.Prefix = p.cur.Literal
-			}
-		case token.FORMAT:
-			p.nextToken()
-			s3.Format = p.cur.Literal
-		default:
-		}
-	}
+    for !p.peekTokenIs(token.EXTRACT) && !p.peekTokenIs(token.EOF) && !p.peekTokenIs(token.JSON) && !p.peekTokenIs(token.SELECT) && !p.peekTokenIs(token.EXPLODE) {
+        p.nextToken()
+        switch p.cur.Type {
+        case token.BUCKET:
+            p.nextToken()
+            s3.Bucket = p.cur.Literal
+        case token.REGION:
+            p.nextToken()
+            s3.Region = p.cur.Literal
+        case token.PREFIX:
+            p.nextToken()
+            s3.Prefix = p.cur.Literal
+        case token.FORMAT:
+            p.nextToken()
+            s3.Format = p.cur.Literal
+        default:
+        }
+    }
 
-	return s3
+    return s3
 }
 
 func (p *Parser) parseExtract() *ast.ExtractStatement {
@@ -165,13 +160,12 @@ func (p *Parser) parseExtract() *ast.ExtractStatement {
 	}
 
 	for p.curTokenIs(token.IDENT) || p.curTokenIs(token.ASTERISK) {
-		if p.peekTokenIs(token.IDENT) {
+		if p.peekTokenIs(token.IDENT) || p.peekTokenIs(token.DOT) || p.peekTokenIs(token.ASTERISK) {
 			field := p.parseFieldMapping()
 			ext.Fields = append(ext.Fields, field)
 		} else {
 			break
 		}
-		p.nextToken()
 	}
 
 	return ext
