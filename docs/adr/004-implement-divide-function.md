@@ -1,7 +1,7 @@
 # ADR-004: Implement Divide Function
 
 ## Status
-Proposed
+Accepted
 
 ## Context
 The sieve project needs a division function to complement the existing add, subtract, and multiply operations.
