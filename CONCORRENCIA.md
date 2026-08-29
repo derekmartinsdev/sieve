@@ -38,17 +38,23 @@ git worktree prune
 mkdir -p .workspace docs/adr
 ```
 
-### Fase 1: Planejamento — ADRs + Contratos + AGENTS.md
+### Fase 1: Proposta — Branch `props/` (proposal)
 
-**1.1 Crie os ADRs no branch main primeiro**
-
-ADRs (Architecture Decision Records) documentam as decisões de design. Cada task independente ganha um ADR. Crie todos os ADRs sequencialmente em main e faça commit:
+**NUNCA proponha contratos direto na main.** Crie uma branch de proposta:
 
 ```bash
-git checkout main
+git checkout -b props/nome-da-feature main
 ```
 
-Exemplo de `docs/adr/001-lexer-implementation.md`:
+A branch `props/` contém:
+- **ADRs** com status `Proposed` — documentam as decisões de design
+- **Contratos/Interfaces** — tipos, structs, funções vazias que as implementações vão seguir
+- **AGENTS.md** — regras para os agentes
+
+**1.1 Crie os ADRs**
+
+Cada task independente ganha um ADR. Exemplo de `docs/adr/001-lexer-implementation.md`:
+
 ```markdown
 # ADR-001: Implementação do Lexer
 
@@ -69,19 +75,16 @@ strings, números, e operadores (|, /\, ->, :, =).
 - Consistente com a abordagem do "Writing a Compiler in Go"
 ```
 
-Crie um ADR para cada task independente: `001-lexer.md`, `002-ast.md`, `003-parser.md`, etc. Commit tudo em main de uma vez.
+Crie um ADR para cada task independente: `001-lexer.md`, `002-ast.md`, `003-parser.md`, etc.
 
-**1.2 Crie os contratos/interfaces em main**
+**1.2 Crie os contratos/interfaces na proposta**
 
-Se as tasks compartilham tipos (ex: token types usados pelo parser), crie as interfaces vazias em main:
+Defina os tipos compartilhados entre os componentes. Exemplo `token/token.go`:
 
-```bash
-mkdir -p token
-cat > token/token.go << 'EOF'
+```go
 package token
 
 type TokenType string
-
 type Token struct {
     Type    TokenType
     Literal string
@@ -93,71 +96,63 @@ const (
     ILLEGAL = "ILLEGAL"
     EOF     = "EOF"
     IDENT   = "IDENT"
-    // ... outros tipos
 )
 
 var Keywords = map[string]TokenType{}
 func LookupIdent(ident string) TokenType { return IDENT }
-EOF
-
-git add docs/adr/ token/
-git commit -m "docs: add ADRs for all components + token interfaces"
-git push origin main
 ```
 
-**Isso elimina conflitos no merge porque o contrato já está em main.**
-
-**1.3 Crie/atualize o AGENTS.md**
-
-O `AGENTS.md` (ou `.opencode/rules.md`) é lido automaticamente pelo opencode em toda sessão. Commit ele em main. Exemplo completo:
+**1.3 Crie o AGENTS.md na proposta**
 
 ```markdown
-# Sieve Transpiler — Regras para Agentes
+# Regras para Agentes
 
 ## Workflow
+1. ADRs estão em docs/adr/ com status Proposed (aguardando aprovação)
+2. Contratos estão em token/, ast/ etc — NÃO modifique os contratos
+3. Cada feature usa git worktree de main: `git worktree add -b feat/<name> .workspace/feat/<name> main`
+4. Agentes trabalham em paralelo em seus worktrees
+5. Integração via merge no branch de integração
+6. ADRs atualizados para Accepted no PR final
 
-### ADR-Driven Development
-- Toda feature começa com um ADR em docs/adr/NNN-description.md
-- Formato: Status, Context, Decision, Consequences
-- O ADR deve ser criado em main ANTES de iniciar a implementação
+## Commits
+- feat:, fix:, docs:, refactor:, test:, chore:
 
-### Branches
-- Cada feature tem seu próprio branch: feat/<nome>
-- Branches são isolados via git worktree em .workspace/feat/<nome>
-- NUNCA compartilhe o mesmo checkout entre agentes
-
-### Commits
-- Commits devem ser atômicos por arquivo
-- Mensagem no formato: tipo: mensagem (ex: "feat: add lexer", "fix: handle hyphen in identifiers")
-- Tipos: feat, fix, docs, refactor, test, chore
-
-### Código
-- Linguagem: Go
-- Package por diretório (token/, lexer/, ast/, parser/, etc)
-- Testes obrigatórios para pipeline operators e codegen
-- go vet deve passar antes do push
-- Erros devem ser retornados, não panic
-
-## Comandos úteis
-- go mod init github.com/derekmartinsdev/sieve
-- go build ./...
-- go test ./... -v
-- go vet ./...
-
-## Estrutura esperada
-- token/token.go — tipos de token
-- lexer/lexer.go — lexer
-- ast/ast.go — AST nodes
-- parser/parser.go — parser
-- semantic/semantic.go — análise semântica
-- pipeline/pipeline.go — operadores de pipeline
-- codegen/codegen.go — geração de código PySpark
-- cmd/sieve/main.go — entry point
+## Código
+- Go module: github.com/org/repo
+- Packages por diretório
+- Testes com `testing` package
+- `go vet` obrigatório
+- Erros como retorno, não panic
 ```
 
-Commit o AGENTS.md em main. Agora toda sessão do opencode começa sabendo as regras.
+**1.4 Commit + Push da proposta**
 
-### Fase 2: Criar Worktrees (3 segundos)
+```bash
+git add docs/adr/ token/ AGENTS.md
+git commit -m "props: add ADRs 001-003 + contracts for lexer, ast, parser"
+git push origin props/nome-da-feature
+```
+
+Neste ponto a branch `props/` contém **tudo que é necessário para começar**, mas nada foi implementado ainda. É puro contrato + documentação.
+
+### Fase 2: Aprovação — Merge `props/` → `main`
+
+A proposta é revisada. Se aprovada:
+
+```bash
+git checkout main
+git merge props/nome-da-feature -m "feat: approve proposal - ADRs 001-003 + contracts"
+git push origin main
+
+# Opcional: deletar branch de proposta
+git branch -d props/nome-da-feature
+git push origin --delete props/nome-da-feature
+```
+
+**Agora `main` tem os ADRs + contratos.** O status dos ADRs continua `Proposed` — eles viram `Accepted` só no PR final da implementação.
+
+### Fase 3: Criar Worktrees a partir de `main` (3 segundos)
 
 ```bash
 git worktree add -b feat/lexer    .workspace/feat/lexer    main
@@ -168,9 +163,61 @@ git worktree add -b feat/pipeline .workspace/feat/pipeline main
 git worktree add -b feat/codegen  .workspace/feat/codegen  main
 ```
 
-### Fase 3: Lançar Agentes Concorrentes
+Cada worktree já nasce com os **contratos no lugar** — `token/token.go`, interfaces, etc. Nenhum agente precisa copiar nada de ninguém.
 
-Cada agente recebe instruções precisas. O prompt deve incluir:
+### Fase 4: Antes de Começar — Verificar se Já Foi Feito
+
+**Cada agente ANTES de implementar:**
+
+1. `git fetch origin`
+2. `grep "^## Status" docs/adr/NNN-*.md` — se `Accepted`, já foi implementado. **Pare.**
+3. `git branch -r | grep feat/<nome>` — se a branch existe remotamente, alguém já está implementando. **Pare.**
+4. `gh pr list --state open --head feat/<nome>` — se tem PR aberto, já está em revisão. **Pare.**
+5. Se nada disso existe → **pode começar**
+
+```mermaid
+flowchart TD
+    A[ADR Proposed] --> B{Status Accepted?}
+    B -->|Sim| C[Fim - já implementado]
+    B -->|Não| D{Branch feat existe?}
+    D -->|Sim| E[Fim - alguém já está fazendo]
+    D -->|Não| F[Criar worktree de main]
+    F --> G[Implementar]
+    G --> H[Commit + push para feat/]
+    H --> I{Pronto para main?}
+    I -->|Não| G
+    I -->|Sim| J[PR feat → main]
+    J --> K[ADR → Accepted em main]
+```
+
+### Fase 5: Implementar + Commitar Progresso
+
+Cada agente implementa no seu worktree isolado. A cada passo completo, commit + push no **próprio branch feat/**. Quando a feature estiver completa e testada, abre PR para main.
+
+Isso permite que outro agente veja a branch remota e **não comece a mesma coisa**.
+
+Exemplo de commits incrementais:
+```bash
+# Worktree do lexer — branch feat/lexer
+git add token/token.go
+git commit -m "feat: add TokenType constants and Token struct"
+git push origin feat/lexer
+
+git add lexer/lexer.go
+git commit -m "feat: add Lexer with NextToken for keywords and identifiers"
+git push origin feat/lexer
+
+git add -u
+git commit -m "feat: add string/number/operator support to lexer"
+git push origin feat/lexer
+```
+
+Cadência ideal de commits:
+- 1 commit por arquivo novo
+- 1 commit por funcionalidade atômica
+- `git push` após cada commit — assim a branch remota existe e bloqueia outros agentes
+
+### Fase 6: Merge na Integração + Testes
 
 1. **Diretório** do worktree (via `--dir` ou `--projectPath`)
 2. **Branch** em que está
@@ -230,7 +277,7 @@ git merge feat/pipeline -m "feat: merge pipeline"
 git merge feat/codegen -m "feat: merge codegen"
 ```
 
-**Problema comum:** Conflitos em `ast/ast.go` ou `token/token.go` porque dois branches criaram o mesmo arquivo. Isso acontece se você NÃO criou os contratos em main (Fase 1.2). Se acontecer:
+**Problema comum:** Conflitos em `ast/ast.go` ou `token/token.go` se dois branches criaram o mesmo arquivo. **Isso NÃO acontece quando os contratos foram aprovados em main primeiro** (Fase 1-2). Se acontecer (porque você pulou a fase de proposta):
 
 ```bash
 git diff --name-only --diff-filter=U   # ver arquivos conflitados
@@ -240,7 +287,7 @@ git add ast/ast.go
 git commit -m "feat: merge X (resolve conflito em ast/ast.go)"
 ```
 
-Se os contratos foram criados em main (recomendado), esse passo não terá conflitos — cada branch só criou arquivos novos no seu diretório.
+**Com contratos em main, cada branch cria apenas arquivos NOVOS em seus diretórios — zero conflitos.**
 
 ### Fase 6: Build + Testes + Fixes
 
@@ -260,13 +307,14 @@ go vet ./...          # análise estática
 
 **Vantagem:** Você descobre TUDO de uma vez, não um bug por PR sequencial.
 
+**Dica:** Se detectar que um componente está incompleto ou bugado após o merge, **crie uma nova branch feat/fix-X a partir de main**, corrija lá, e faça PR direto para main. Não reabra branches antigas.
+
 ### Fase 7: Atualizar ADRs + PR Final
 
 ```bash
-# Atualizar status dos ADRs de Proposed → Accepted
-# (opcional: fazer no branch de integração antes do PR)
+# Atualizar ADRs de Proposed → Accepted
 for adr in docs/adr/*.md; do
-  sed -i '' 's/^## Status$/\n## Status\nAccepted/' "$adr" 2>/dev/null || true
+  sed -i '' 's/Proposed/Accepted/' "$adr"
 done
 
 git add docs/adr/
@@ -308,18 +356,31 @@ Crie este arquivo em `.opencode/rules.md` ou `AGENTS.md` na raiz do projeto:
 ```markdown
 # Regras para Agentes
 
+## Regra de Ouro
+**Antes de implementar qualquer coisa, verifique se já foi feito.**
+
+```
+1. grep "^## Status" docs/adr/NNN-*.md → "Accepted"? Já foi. Pare.
+2. git branch -r | grep feat/<nome> → existe? Alguém já está fazendo. Pare.
+3. gh pr list --state open --head feat/<nome> → tem PR? Já está em revisão. Pare.
+4. Nada disso? Pode começar.
+```
+
 ## Workflow
-1. ADRs em docs/adr/ devem ser criados em main antes da implementação
-2. Cada feature usa git worktree: `git worktree add -b feat/<name> .workspace/feat/<name> main`
-3. Agentes trabalham em paralelo, cada um no seu worktree (`--dir`)
-4. Integração via merge sequencial em um worktree de integração
-5. ADRs atualizados para Accepted no PR final
+0. Propostas vão para branch `props/` — ADRs + contratos
+1. Após aprovação, merge props → main
+2. Worktrees a partir de main: `git worktree add -b feat/<name> .workspace/feat/<name> main`
+3. Cada agente implementa no seu worktree
+4. **Commits incrementais no próprio branch feat/ com push frequente**
+5. Outros agentes veem a branch remota e não duplicam trabalho
+6. Quando completo + testado → PR feat/ → main
+7. ADR vira Accepted no merge do PR
 
 ## Commits
+- props: para propostas (ADRs + contratos)
 - feat: para novas funcionalidades
 - fix: para correções
-- docs: para documentação (ADRs, comentários)
-- refactor: para refatoração
+- docs: para documentação
 - test: para testes
 
 ## Código
@@ -361,7 +422,7 @@ Quando for criar um novo agente para implementar uma feature:
 3. **Conflitos em arquivos idênticos** (mesmo conteúdo) — `git checkout --ours` resolve
 4. **Sempre use `--dir`** nos agentes, nunca `cd` — evita confusão de diretório
 5. **Limpe worktrees velhos**: `git worktree prune` + `rm -rf .workspace/*`
-6. **Crie contratos em main primeiro** — elimina 90% dos conflitos de merge
+6. **Crie contratos em props/ primeiro, depois merge em main** — elimina 100% dos conflitos de merge
 
 ### 🔧 Adaptação para outras ferramentas
 
@@ -392,8 +453,11 @@ git clone git@github.com:seu-org/seu-repo.git
 cd seu-repo
 mkdir -p .workspace docs/adr
 
-# === ADRs (sequencial, em main) ===
-git checkout main
+# === PROPOSTA (props/) — ADRs + Contratos ===
+git checkout -b props/transpiler main
+mkdir -p docs/adr token ast
+
+# Cria ADRs
 for i in 1 2 3; do
   cat > "docs/adr/00$i-description.md" << ADR
 # ADR-00$i: Description
@@ -411,57 +475,62 @@ Proposed
 ...
 ADR
 done
-git add docs/adr/
-git commit -m "docs: add ADRs 001-003"
-git push origin main
 
-# === CONTRATOS (sequencial, em main) ===
-# Crie as interfaces/tipos compartilhados
-git add token/  # se aplicável
-git commit -m "feat: add shared token interfaces"
-git push origin main
+# Cria contratos (interfaces/tipos compartilhados)
+cat > token/token.go << 'EOF'
+package token
+type TokenType string
+type Token struct { Type TokenType; Literal string }
+EOF
 
-# === AGENTS.md (sequencial, em main) ===
 cat > AGENTS.md << 'EOF'
 # Regras para Agentes
-... (conteúdo do guia)
+...
 EOF
-git add AGENTS.md
-git commit -m "docs: add AGENTS.md with workflow rules"
-git push origin main
 
-# === CRIAR WORKTREES ===
-for branch in feature-a feature-b feature-c; do
+git add -A
+git commit -m "props: add ADRs 001-003 + contracts + AGENTS.md"
+git push origin props/transpiler
+
+# === APROVAÇÃO → MAIN ===
+git checkout main
+git merge props/transpiler -m "feat: approve proposal - ADRs + contracts"
+git push origin main
+git branch -d props/transpiler
+
+# === CRIAR WORKTREES (de main) ===
+for branch in lexer ast parser; do
   git worktree add -b "feat/$branch" ".workspace/feat/$branch" main
 done
 
-# === LANÇAR AGENTES ===
-# Terminal 1
-opencode --dir .workspace/feat/feature-a "Implemente feature A conforme ADR-001..."
-# Terminal 2
-opencode --dir .workspace/feat/feature-b "Implemente feature B conforme ADR-002..."
-# Terminal 3
-opencode --dir .workspace/feat/feature-c "Implemente feature C conforme ADR-003..."
+# === LANÇAR AGENTES (paralelo) — cada um verifica antes ===
+# Prompt do agente:
+# "1. Verifique se feat/lexer já existe remoto (git branch -r | grep feat/lexer)
+#  2. Verifique se ADR-001 já está Accepted (grep Status docs/adr/001-*.md)
+#  3. Se nada, implemente no worktree .workspace/feat/lexer
+#  4. Commit incremental a cada arquivo completo com push"
 
-# === MERGE + TEST ===
+# Terminal 1
+opencode --dir .workspace/feat/lexer "Implemente lexer conforme ADR-001..."
+# Terminal 2
+opencode --dir .workspace/feat/ast "Implemente AST conforme ADR-002..."
+# Terminal 3
+opencode --dir .workspace/feat/parser "Implemente parser conforme ADR-003..."
+
+# === MERGE NA INTEGRAÇÃO + TESTES ===
 git worktree add -b feat/integration .workspace/feat/integration main
 cd .workspace/feat/integration
-for branch in feature-a feature-b feature-c; do
-  git merge "feat/$branch" -m "feat: merge $branch" || {
-    echo "Conflito em $branch"
-    git diff --name-only --diff-filter=U | xargs git checkout --ours
-    git add -A
-    git commit -m "feat: merge $branch (resolvido)"
-  }
+for branch in lexer ast parser; do
+  git merge "feat/$branch" -m "feat: merge $branch"
 done
 go build ./... && go test ./... -v && go vet ./... || echo "Corrija os erros acima"
 
-# === ATUALIZAR ADRs + PR ===
+# === ATUALIZAR ADRs (Proposed → Accepted) + PR FINAL ===
 for adr in docs/adr/*.md; do
   sed -i '' 's/Proposed/Accepted/' "$adr"
 done
 git add -A
-git commit -m "feat: integrate all components"
+git commit -m "feat: integrate all components and accept ADRs"
 git push origin feat/integration
 gh pr create --base main --head feat/integration --title "..." --body "..."
 ```
