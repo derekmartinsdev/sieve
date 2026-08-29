@@ -1,7 +1,7 @@
 # ADR-001: Implement Add Function
 
 ## Status
-Proposed
+Accepted
 
 ## Context
 The sieve project needs a basic arithmetic addition function to support core mathematical operations.
