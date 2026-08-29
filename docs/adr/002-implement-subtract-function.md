@@ -1,7 +1,7 @@
 # ADR-002: Implement Subtract Function
 
 ## Status
-Proposed
+Accepted
 
 ## Context
 The sieve project needs a basic arithmetic subtraction function to complement the existing addition operation and support core mathematical operations.
