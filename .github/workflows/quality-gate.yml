@@ -1,0 +1,59 @@
+name: Quality Gate
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  quality-gate:
+    name: Quality Gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.27"
+
+      - name: gofmt
+        run: test -z "$(gofmt -l .)"
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v7
+        with:
+          version: latest
+          args: --timeout=2m
+
+      - name: gosec
+        run: |
+          go install github.com/securego/gosec/v2/cmd/gosec@latest
+          gosec -quiet ./...
+
+      - name: go test + coverage
+        run: |
+          go test ./... -cover -coverprofile=coverage.out -count=1
+          go tool cover -func=coverage.out
+          echo ""
+          echo "Coverage thresholds: ≥60% per package"
+          go tool cover -func=coverage.out | awk 'END {
+            total = $NF
+            gsub("%","",total)
+            if (total+0 < 60) { print "❌  Coverage " total "% below 60% threshold"; exit 1 }
+            else { print "✅  Coverage " total "% meets threshold" }
+          }'
+
+      - name: go build
+        run: go build -o transpiler ./cmd/transpiler/
+
+      - name: Integration tests
+        run: |
+          for f in tests/transform/pyspark/*.transform.sieve; do
+            ./transpiler "$f" > /dev/null || (echo "FAIL: $f" && exit 1)
+          done
+          echo "✅  All 20 integration tests passed"
