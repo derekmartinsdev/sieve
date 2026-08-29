@@ -1,7 +1,7 @@
 # ADR-003: Implement Multiply Function
 
 ## Status
-Proposed
+Accepted
 
 ## Context
 The sieve project needs a multiplication function to complement the existing add and subtract operations.
