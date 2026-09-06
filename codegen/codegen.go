@@ -189,214 +189,6 @@ func generateSection(w io.Writer, sec *ast.Section) error {
 	return err
 }
 
-func schemaFromAs(as string) string {
-	if as == "" {
-		return "array<string>"
-	}
-	if as == "array" {
-		return "array<string>"
-	}
-	return as
-}
-
-func splitFields(fields []*ast.FieldDef) (regular, computed []*ast.FieldDef) {
-	for _, f := range fields {
-		if f.ComputedExpr != nil {
-			computed = append(computed, f)
-		} else {
-			regular = append(regular, f)
-		}
-	}
-	return
-}
-
-func buildAliasMap(fields []*ast.FieldDef) map[string]string {
-	m := make(map[string]string)
-	for _, f := range fields {
-		src := f.Source
-		if src == "" {
-			src = f.Name
-		}
-		alias := f.Alias
-		if alias == "" {
-			alias = f.Name
-		}
-		m[src] = alias
-	}
-	return m
-}
-
-func emitComputedColumn(w io.Writer, varName string, f *ast.FieldDef, nameMap map[string]string) error {
-	if f.ComputedExpr == nil {
-		return nil
-	}
-	left := f.ComputedExpr.Left
-	right := f.ComputedExpr.Right
-	if a, ok := nameMap[left]; ok {
-		left = a
-	}
-	if a, ok := nameMap[right]; ok {
-		right = a
-	}
-	expr := fmt.Sprintf("(F.col(%q) %s F.col(%q))", left, f.ComputedExpr.Operator, right)
-	if f.DataType != "" {
-		expr += fmt.Sprintf(".cast(%q)", f.DataType)
-	}
-	_, err := fmt.Fprintf(w, "%s = %s.withColumn(%q, %s)\n", varName, varName, f.Alias, expr)
-	return err
-}
-
-func splitExplodePath(path string) (col, jsonPath string) {
-	i := strings.Index(path, ".")
-	if i < 0 {
-		return path, "$"
-	}
-	return path[:i], "$." + path[i+1:]
-}
-
-func lastPathPart(path string) string {
-	i := strings.LastIndex(path, ".")
-	if i < 0 {
-		return path
-	}
-	return path[i+1:]
-}
-
-func buildDerivedFieldExpr(f *ast.FieldDef) string {
-	alias := f.Alias
-	if alias == "" {
-		alias = f.Name
-	}
-	expr := fmt.Sprintf("F.col(%q).alias(%q)", f.Name, alias)
-	if f.DataType != "" {
-		expr += fmt.Sprintf(".cast(%q)", f.DataType)
-	}
-	return expr
-}
-
-func buildJsonFieldExpr(f *ast.FieldDef, jsonCol string) string {
-	col := f.JsonColumn
-	if col == "" {
-		col = jsonCol
-	}
-	source := f.Source
-	if source == "" {
-		source = f.Name
-	}
-	alias := f.Alias
-	if alias == "" {
-		alias = f.Name
-	}
-	expr := fmt.Sprintf("F.get_json_object(F.col(%q), %q).alias(%q)", col, "$."+source, alias)
-	if f.DataType != "" {
-		expr += fmt.Sprintf(".cast(%q)", f.DataType)
-	}
-	return expr
-}
-
-func generateSelect(w io.Writer, varName string, sel *ast.SelectStmt) error {
-	if len(sel.Fields) == 0 {
-		return nil
-	}
-	_, err := fmt.Fprintf(w, "%s = %s.select(\n", varName, varName)
-	if err != nil {
-		return err
-	}
-	for i, f := range sel.Fields {
-		comma := ","
-		if i == len(sel.Fields)-1 {
-			comma = ""
-		}
-		expr := fmt.Sprintf("F.col(%q)", f.Name)
-		if f.Function == "month" {
-			expr = fmt.Sprintf("F.date_format(F.col(%q), \"yyyy-MM\")", f.Name)
-		} else if f.Function == "day" {
-			expr = fmt.Sprintf("F.dayofmonth(F.col(%q))", f.Name)
-		} else if f.Function != "" {
-			expr = fmt.Sprintf("F.%s(F.col(%q))", f.Function, f.Name)
-		}
-		if f.DataType != "" {
-			expr += fmt.Sprintf(".cast(%q)", f.DataType)
-		}
-		alias := f.Name
-		if f.Alias != "" {
-			alias = f.Alias
-		}
-		_, err = fmt.Fprintf(w, "    %s.alias(%q)%s\n", expr, alias, comma)
-		if err != nil {
-			return err
-		}
-	}
-	_, err = fmt.Fprint(w, ")\n")
-	return err
-}
-
-func generateJoin(w io.Writer, varName string, join *ast.Join) error {
-	joinType := "inner"
-	if join.JoinType != "" {
-		joinType = join.JoinType
-	}
-	rightDF := "df_" + join.Right
-	leftAlias := join.LeftAlias
-	if leftAlias == "" {
-		leftAlias = join.Left
-	}
-	rightAlias := join.RightAlias
-	if rightAlias == "" {
-		rightAlias = join.Right
-	}
-
-	var condParts []string
-	if join.Condition != nil {
-		for i, leftRef := range join.Condition.LeftRefs {
-			if i >= len(join.Condition.RightRefs) {
-				break
-			}
-			rightRef := join.Condition.RightRefs[i]
-			condParts = append(condParts,
-				fmt.Sprintf("F.col(%q) == F.col(%q)", leftRef, rightRef))
-		}
-	}
-
-	condition := strings.Join(condParts, " & ")
-	if condition == "" {
-		condition = "F.lit(True)"
-	}
-
-	_, err := fmt.Fprintf(w, "%s = %s.alias(%q).join(%s.alias(%q), %s, %q)\n",
-		varName, varName, leftAlias, rightDF, rightAlias, condition, joinType)
-	if err != nil {
-		return err
-	}
-
-	if join.Select != nil && len(join.Select.Fields) > 0 {
-		if err := generateSelect(w, varName, join.Select); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func generateSink(w io.Writer, varName string, sink *ast.Sink) error {
-	mode := sink.Mode
-	if mode == "" {
-		mode = "overwrite"
-	}
-
-	var partitionClause string
-	if len(sink.PartitionBy) > 0 {
-		parts := make([]string, len(sink.PartitionBy))
-		for i, p := range sink.PartitionBy {
-			parts[i] = fmt.Sprintf("%q", p)
-		}
-		partitionClause = ".partitionBy(" + strings.Join(parts, ",") + ")"
-	}
-
-	_, err := fmt.Fprintf(w, "%s.write.format(%q).mode(%q)%s.save(%q)\n",
-		varName, sink.Format, mode, partitionClause, "s3a://"+sink.Bucket+"/"+sink.Prefix)
-	return err
-}
-
 func generateTransform(w io.Writer, varName string, tc *ast.TransformChain) error {
 	alias := tc.Alias
 
@@ -416,7 +208,7 @@ func generateTransform(w io.Writer, varName string, tc *ast.TransformChain) erro
 		case "replace":
 			old := step.Args[0]
 			new := step.Args[1]
-			escaped := strings.ReplaceAll(old, ".", "\\.")
+			escaped := escapeRegexMeta(old)
 			_, err = fmt.Fprintf(w, "%s = %s.withColumn(%q, F.regexp_replace(F.col(%q), %q, %q))\n",
 				varName, varName, alias, alias, escaped, new)
 		case "prefix":
@@ -432,6 +224,18 @@ func generateTransform(w io.Writer, varName string, tc *ast.TransformChain) erro
 		}
 	}
 	return nil
+}
+
+func escapeRegexMeta(s string) string {
+	var b strings.Builder
+	for _, r := range s {
+		switch r {
+		case '.', '*', '+', '?', '^', '$', '{', '}', '(', ')', '[', ']', '|', '\\':
+			b.WriteRune('\\')
+		}
+		b.WriteRune(r)
+	}
+	return b.String()
 }
 
 func formatLit(val string) string {
