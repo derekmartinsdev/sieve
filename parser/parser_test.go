@@ -470,3 +470,70 @@ func TestMultilineIndentationNoConfusion(t *testing.T) {
 		}
 	}
 }
+
+func TestCommaSeparatedFieldsNotAliases(t *testing.T) {
+	input := `src
+    from s3
+        bucket raw
+        region us-east-1
+        prefix src
+        format delta
+    extract
+        json select message
+            name name string
+            age age bigint
+            score score decimal(18,2)
+    select
+        name , age , score`
+
+	prog, errs := parse(input)
+	if len(errs) > 0 {
+		t.Fatalf("unexpected errors: %v", errs)
+	}
+
+	sec := prog.Statements[0].(*ast.Section)
+	sel := sec.Select
+
+	if len(sel.Fields) != 3 {
+		t.Fatalf("expected 3 select fields, got %d (comma consumed as alias?)", len(sel.Fields))
+	}
+
+	expected := []string{"name", "age", "score"}
+	for i, exp := range expected {
+		if sel.Fields[i].Alias != exp {
+			t.Errorf("field[%d] alias: expected %q, got %q (comma should force new field, not alias)", i, exp, sel.Fields[i].Alias)
+		}
+	}
+}
+
+func TestCommaInExtractFieldsNotAliases(t *testing.T) {
+	input := `src
+    from s3
+        bucket raw
+        region us-east-1
+        prefix src
+        format delta
+    extract
+        json select message
+            name name string
+            age age bigint
+            score score decimal(18,2)`
+
+	prog, errs := parse(input)
+	if len(errs) > 0 {
+		t.Fatalf("unexpected errors: %v", errs)
+	}
+
+	sec := prog.Statements[0].(*ast.Section)
+	fields := sec.Extracts[0].JsonSelect.Fields
+
+	if len(fields) != 3 {
+		t.Fatalf("expected 3 extract fields, got %d", len(fields))
+	}
+
+	for i, f := range fields {
+		if f.Name != f.Alias {
+			t.Errorf("field[%d] name=%q alias=%q should match", i, f.Name, f.Alias)
+		}
+	}
+}

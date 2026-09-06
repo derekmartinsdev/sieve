@@ -262,8 +262,14 @@ func (p *Parser) parseJsonExtract() *ast.Extract {
 
 func (p *Parser) parseExtractFields(jsonCol string) []*ast.FieldDef {
 	var fields []*ast.FieldDef
+	justComma := false
 
 	for !p.isEOF() && !p.isSectionStart() && !p.isBodyKeyword() {
+		if p.curTokenIs(token.COMMA) {
+			p.nextToken()
+			justComma = true
+			continue
+		}
 		if p.curTokenIs(token.IDENT) {
 			sourceLine := p.curToken.Line
 			source := p.parseDottedPath()
@@ -278,7 +284,11 @@ func (p *Parser) parseExtractFields(jsonCol string) []*ast.FieldDef {
 				source = ""
 			}
 
-			alias := p.parseAlias(sourceLine)
+			alias := ""
+			if !justComma {
+				alias = p.parseAlias(sourceLine)
+			}
+			justComma = false
 
 			dataType := ""
 			if p.isTypeKeyword(p.curToken.Type) {
@@ -318,10 +328,12 @@ func (p *Parser) parseSelect() *ast.SelectStmt {
 
 func (p *Parser) parseSelectFields() []ast.SelectField {
 	var fields []ast.SelectField
+	justComma := false
 
 	for !p.isEOF() && !p.isSectionStart() && !p.isBodyKeyword() {
 		if p.curTokenIs(token.COMMA) {
 			p.nextToken()
+			justComma = true
 			continue
 		}
 		if !p.isIdentOrDateFunc() {
@@ -346,12 +358,18 @@ func (p *Parser) parseSelectFields() []ast.SelectField {
 
 		if p.curTokenIs(token.COMMA) {
 			p.nextToken()
+			justComma = true
 		}
 
-		alias := p.parseAlias(pathLine)
+		alias := ""
+		if !justComma {
+			alias = p.parseAlias(pathLine)
+		}
+		justComma = false
 
 		if p.curTokenIs(token.COMMA) {
 			p.nextToken()
+			justComma = true
 		}
 
 		dataType := ""
