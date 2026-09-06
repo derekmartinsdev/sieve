@@ -4,6 +4,7 @@ import (
 	"github.com/derekmartinsdev/sieve/ast"
 	"github.com/derekmartinsdev/sieve/token"
 )
+
 func (p *Parser) parseSink() *ast.Sink {
 	sink := &ast.Sink{}
 
@@ -60,4 +61,3 @@ func (p *Parser) parseSink() *ast.Sink {
 
 	return sink
 }
-

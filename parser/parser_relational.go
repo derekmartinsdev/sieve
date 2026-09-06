@@ -7,6 +7,7 @@ import (
 	"github.com/derekmartinsdev/sieve/ast"
 	"github.com/derekmartinsdev/sieve/token"
 )
+
 func (p *Parser) parseDerivedSection(sec *ast.Section) *ast.Section {
 	join := &ast.Join{}
 
@@ -123,4 +124,3 @@ func (p *Parser) parseDerivedSection(sec *ast.Section) *ast.Section {
 
 	return sec
 }
-

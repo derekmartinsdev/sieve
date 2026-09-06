@@ -7,6 +7,7 @@ import (
 	"github.com/derekmartinsdev/sieve/ast"
 	"github.com/derekmartinsdev/sieve/token"
 )
+
 func (p *Parser) parseExtract() *ast.Extract {
 	ext := &ast.Extract{}
 	p.nextToken()
@@ -153,4 +154,3 @@ func (p *Parser) parseExtractFields(jsonCol string) []*ast.FieldDef {
 
 	return fields
 }
-

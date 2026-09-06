@@ -6,6 +6,7 @@ import (
 	"github.com/derekmartinsdev/sieve/ast"
 	"github.com/derekmartinsdev/sieve/token"
 )
+
 func (p *Parser) parseSelect() *ast.SelectStmt {
 	p.nextToken()
 
