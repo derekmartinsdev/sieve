@@ -265,6 +265,7 @@ func (p *Parser) parseExtractFields(jsonCol string) []*ast.FieldDef {
 
 	for !p.isEOF() && !p.isSectionStart() && !p.isBodyKeyword() {
 		if p.curTokenIs(token.IDENT) {
+			sourceLine := p.curToken.Line
 			source := p.parseDottedPath()
 
 			computedExpr := (*ast.BinaryExpr)(nil)
@@ -277,7 +278,7 @@ func (p *Parser) parseExtractFields(jsonCol string) []*ast.FieldDef {
 				source = ""
 			}
 
-			alias := p.parseAlias()
+			alias := p.parseAlias(sourceLine)
 
 			dataType := ""
 			if p.isTypeKeyword(p.curToken.Type) {
@@ -327,9 +328,9 @@ func (p *Parser) parseSelectFields() []ast.SelectField {
 			break
 		}
 
+		pathLine := p.curToken.Line
 		path := p.parseDottedPath()
 
-		alias := ""
 		function := ""
 
 		if isDateFunc(p.curToken) {
@@ -347,7 +348,7 @@ func (p *Parser) parseSelectFields() []ast.SelectField {
 			p.nextToken()
 		}
 
-		alias = p.parseAlias()
+		alias := p.parseAlias(pathLine)
 
 		if p.curTokenIs(token.COMMA) {
 			p.nextToken()
@@ -413,11 +414,14 @@ func (p *Parser) parseDottedPath() string {
 	return strings.Join(parts, ".")
 }
 
-func (p *Parser) parseAlias() string {
+func (p *Parser) parseAlias(sameLine int) string {
 	if !p.isIdentOrDateFunc() || p.isTypeKeyword(p.curToken.Type) || p.peekTokenIs(token.DOT) || p.curToken.Column <= 1 {
 		return ""
 	}
-	if isDateFunc(p.peekToken) || p.isTypeKeyword(p.peekToken.Type) {
+	if isDateFunc(p.peekToken) {
+		return ""
+	}
+	if sameLine > 0 && p.curToken.Line != sameLine {
 		return ""
 	}
 	alias := p.curToken.Literal

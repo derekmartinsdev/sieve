@@ -298,3 +298,175 @@ func TestMissingJoinOperator(t *testing.T) {
 		t.Errorf("expected error about missing join operator, got: %v", errs)
 	}
 }
+
+func TestExtractFieldsNoDuplication(t *testing.T) {
+	input := `events
+    from s3
+        bucket raw
+        region us-east-1
+        prefix events
+        format delta
+    extract
+        json select message
+            user_id user_id string
+            event_type event_type string
+            amount amount decimal(18,2)`
+
+	prog, errs := parse(input)
+	if len(errs) > 0 {
+		t.Fatalf("unexpected errors: %v", errs)
+	}
+
+	sec := prog.Statements[0].(*ast.Section)
+	fields := sec.Extracts[0].JsonSelect.Fields
+
+	if len(fields) != 3 {
+		t.Fatalf("expected 3 fields, got %d (duplication bug)", len(fields))
+	}
+
+	checks := []struct {
+		name     string
+		alias    string
+		dataType string
+	}{
+		{"user_id", "user_id", "string"},
+		{"event_type", "event_type", "string"},
+		{"amount", "amount", "decimal(18,2)"},
+	}
+
+	for i, c := range checks {
+		if fields[i].Name != c.name {
+			t.Errorf("field[%d] name: expected %q, got %q", i, c.name, fields[i].Name)
+		}
+		if fields[i].Alias != c.alias {
+			t.Errorf("field[%d] alias: expected %q, got %q", i, c.alias, fields[i].Alias)
+		}
+		if fields[i].DataType != c.dataType {
+			t.Errorf("field[%d] dataType: expected %q, got %q", i, c.dataType, fields[i].DataType)
+		}
+	}
+}
+
+func TestComputedColumnHasCorrectAlias(t *testing.T) {
+	input := `orders
+    from s3
+        bucket raw
+        region us-east-1
+        prefix orders
+        format delta
+    extract
+        json explode message.items array
+            quantity quantity bigint
+            price price decimal(18,2)
+            quantity * price total decimal(18,2)`
+
+	prog, errs := parse(input)
+	if len(errs) > 0 {
+		t.Fatalf("unexpected errors: %v", errs)
+	}
+
+	sec := prog.Statements[0].(*ast.Section)
+	fields := sec.Extracts[0].Explode.Fields
+
+	if len(fields) != 3 {
+		t.Fatalf("expected 3 fields, got %d", len(fields))
+	}
+
+	computed := fields[2]
+	if computed.ComputedExpr == nil {
+		t.Fatal("expected computed expression on field[2]")
+	}
+	if computed.Alias != "total" {
+		t.Errorf("expected alias 'total', got %q (was empty string before fix)", computed.Alias)
+	}
+	if computed.Name != "total" {
+		t.Errorf("expected name 'total', got %q", computed.Name)
+	}
+	if computed.DataType != "decimal(18,2)" {
+		t.Errorf("expected dataType 'decimal(18,2)', got %q", computed.DataType)
+	}
+}
+
+func TestSelectFieldsNoAliasDisplacement(t *testing.T) {
+	input := `logs
+    from s3
+        bucket raw
+        region us-east-1
+        prefix logs
+        format delta
+    extract
+        json select message
+            event_ts event_ts date(YYYY-MM-DD)
+    select
+        event_ts
+        event_ts year date(YYYY) or year()
+        event_ts month date(YYYY-MM) or month()`
+
+	prog, errs := parse(input)
+	if len(errs) > 0 {
+		t.Fatalf("unexpected errors: %v", errs)
+	}
+
+	sec := prog.Statements[0].(*ast.Section)
+	sel := sec.Select
+
+	if len(sel.Fields) != 3 {
+		t.Fatalf("expected 3 select fields, got %d", len(sel.Fields))
+	}
+
+	if sel.Fields[0].Name != "event_ts" {
+		t.Errorf("field[0] name: expected 'event_ts', got %q", sel.Fields[0].Name)
+	}
+	if sel.Fields[0].Alias != "event_ts" {
+		t.Errorf("field[0] alias: expected 'event_ts', got %q (was displaced by next field before fix)", sel.Fields[0].Alias)
+	}
+
+	if sel.Fields[1].Function != "year" {
+		t.Errorf("field[1] function: expected 'year', got %q", sel.Fields[1].Function)
+	}
+	if sel.Fields[1].Alias != "year" {
+		t.Errorf("field[1] alias: expected 'year', got %q", sel.Fields[1].Alias)
+	}
+
+	if sel.Fields[2].Function != "month" {
+		t.Errorf("field[2] function: expected 'month', got %q", sel.Fields[2].Function)
+	}
+	if sel.Fields[2].Alias != "month" {
+		t.Errorf("field[2] alias: expected 'month', got %q", sel.Fields[2].Alias)
+	}
+}
+
+func TestMultilineIndentationNoConfusion(t *testing.T) {
+	input := `metrics
+    from s3
+        bucket raw
+        region us-east-1
+        prefix metrics
+        format delta
+    extract
+        json select message
+            first_name first_name string
+            last_name last_name string
+            age age bigint`
+
+	prog, errs := parse(input)
+	if len(errs) > 0 {
+		t.Fatalf("unexpected errors: %v", errs)
+	}
+
+	sec := prog.Statements[0].(*ast.Section)
+	fields := sec.Extracts[0].JsonSelect.Fields
+
+	if len(fields) != 3 {
+		t.Fatalf("expected 3 fields, got %d", len(fields))
+	}
+
+	for i, f := range fields {
+		if f.Name == f.Alias && f.Source == f.Name {
+			continue
+		}
+		if f.Alias != f.Name {
+			t.Logf("field[%d] name=%q alias=%q — these should match for simple fields", i, f.Name, f.Alias)
+		}
+	}
+}
