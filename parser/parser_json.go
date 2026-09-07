@@ -12,8 +12,14 @@ func (p *Parser) parseExtract() *ast.Extract {
 	ext := &ast.Extract{}
 	p.nextToken()
 
-	if !p.curTokenIs(token.JSON) {
-		p.error("'extract' must be followed by 'json'. Did you mean 'extract json select ...' or 'extract json explode ...'?")
+	if !p.curTokenIs(token.JSON) && !p.curTokenIs(token.PLAIN) {
+		p.error("'extract' must be followed by 'json' or 'plain'. Did you mean 'extract json select ...' or 'extract plain'?")
+		return ext
+	}
+
+	if p.curTokenIs(token.PLAIN) {
+		ext.Type = ast.ExtTypePlain
+		ext.Plain = p.parsePlainSelect()
 		return ext
 	}
 
@@ -25,16 +31,19 @@ func (p *Parser) parseExtract() *ast.Extract {
 			js := p.parseJsonSelect()
 			if js != nil {
 				ext.JsonSelect = js.JsonSelect
+				ext.Type = ast.ExtTypeJsonSelect
 			}
 		case token.EXPLODE:
 			ex := p.parseExplode()
 			if ex != nil {
 				ext.Explode = ex.Explode
+				ext.Type = ast.ExtTypeExplode
 			}
 		case token.EXTRACT:
 			je := p.parseJsonExtract()
 			if je != nil {
 				ext.JsonExtract = je.JsonExtract
+				ext.Type = ast.ExtTypeJsonExtract
 			}
 		default:
 			p.error(fmt.Sprintf("after 'json' expected 'select', 'explode', or 'extract', got %q. Did you mean 'json select message' or 'json explode path array'?", p.curToken.Literal))
@@ -153,4 +162,12 @@ func (p *Parser) parseExtractFields(jsonCol string) []*ast.FieldDef {
 	}
 
 	return fields
+}
+
+func (p *Parser) parsePlainSelect() *ast.PlainSelect {
+	p.nextToken() // consume 'plain'
+	ps := &ast.PlainSelect{
+		Fields: p.parseExtractFields(""),
+	}
+	return ps
 }

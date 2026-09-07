@@ -95,9 +95,6 @@ func buildDerivedFieldExpr(f *ast.FieldDef) string {
 
 func buildJsonFieldExpr(f *ast.FieldDef, jsonCol string) string {
 	col := f.JsonColumn
-	if col == "" {
-		col = jsonCol
-	}
 	source := f.Source
 	if source == "" {
 		source = f.Name
@@ -106,7 +103,12 @@ func buildJsonFieldExpr(f *ast.FieldDef, jsonCol string) string {
 	if alias == "" {
 		alias = f.Name
 	}
-	expr := fmt.Sprintf("F.get_json_object(F.col(%q), %q).alias(%q)", col, "$."+source, alias)
+	var expr string
+	if col == "" {
+		expr = fmt.Sprintf("F.col(%q).alias(%q)", source, alias)
+	} else {
+		expr = fmt.Sprintf("F.get_json_object(F.col(%q), %q).alias(%q)", col, "$."+source, alias)
+	}
 	if f.DataType != "" {
 		expr += fmt.Sprintf(".cast(%q)", f.DataType)
 	}

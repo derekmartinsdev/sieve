@@ -111,6 +111,9 @@ func generateSection(w io.Writer, sec *ast.Section) error {
 			}
 			allFields = append(allFields, ext.JsonExtract.Fields...)
 		}
+		if ext.Plain != nil {
+			allFields = append(allFields, ext.Plain.Fields...)
+		}
 	}
 
 	if len(allFields) > 0 {

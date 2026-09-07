@@ -40,10 +40,21 @@ type Source struct {
 
 func (s *Source) nodeMarker() {}
 
+type ExtractType int
+
+const (
+	ExtTypeJsonSelect ExtractType = iota
+	ExtTypeExplode
+	ExtTypeJsonExtract
+	ExtTypePlain
+)
+
 type Extract struct {
-	Explode     *ExtractExplode
-	JsonSelect  *JsonSelect
+	Type       ExtractType
+	Explode    *ExtractExplode
+	JsonSelect *JsonSelect
 	JsonExtract *JsonExtract
+	Plain      *PlainSelect
 }
 
 func (e *Extract) nodeMarker() {}
@@ -62,6 +73,10 @@ type JsonSelect struct {
 type JsonExtract struct {
 	Path   string // e.g. "perAcquisition.taxes"
 	As     string // "array"
+	Fields []*FieldDef
+}
+
+type PlainSelect struct {
 	Fields []*FieldDef
 }
 

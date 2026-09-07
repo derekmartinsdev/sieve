@@ -38,6 +38,7 @@ const (
 	DELTA       = "DELTA"
 	EXTRACT     = "EXTRACT"
 	JSON        = "JSON"
+	PLAIN       = "PLAIN"
 	MESSAGE     = "MESSAGE"
 	ARRAY       = "ARRAY"
 	TYPE_STRING = "TYPE_STRING"
@@ -77,6 +78,7 @@ var keywords = map[string]TokenType{
 	"delta":       DELTA,
 	"extract":     EXTRACT,
 	"json":        JSON,
+	"plain":       PLAIN,
 	"select":      SELECT,
 	"explode":     EXPLODE,
 	"array":       ARRAY,
